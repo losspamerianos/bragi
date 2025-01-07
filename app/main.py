@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Union
 from pydantic import BaseModel, HttpUrl
 import asyncio
-
+import hashlib
 from .config import settings
 from .services.image import ImageProcessor
 from .services.storage import StorageManager
