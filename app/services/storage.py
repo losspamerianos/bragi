@@ -47,9 +47,9 @@ class StorageManager:
     def get_available_formats(self, image_hash: str) -> Dict[str, str]:
         """Gibt URLs für alle verfügbaren Formate zurück"""
         return {
-            "avif": f"/storage/processed/avif/{image_hash}.avif",
-            "webp": f"/storage/processed/webp/{image_hash}.webp",
-            "original": f"/storage/originals/{image_hash}"
+            "avif": f"http://{settings.HOST}:{settings.PORT}/storage/processed/avif/{image_hash}.avif",
+            "webp": f"http://{settings.HOST}:{settings.PORT}/storage/processed/webp/{image_hash}.webp",
+            "original": f"http://{settings.HOST}:{settings.PORT}/storage/originals/{image_hash}"
         }
 
     async def save_original(self, image_data: bytes, image_hash: str, extension: str):
