@@ -1,14 +1,16 @@
-import pyvips
-from bs4 import BeautifulSoup
-import numpy as np
+import os
+import io
 import cv2
+import pyvips
+import imagehash
+import hashlib
+
+import numpy as np
+
+from PIL import Image
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Any, Tuple
-import imagehash
-from PIL import Image
-import io
-import hashlib
-import os
+from bs4 import BeautifulSoup
 
 from ..config import settings
 from .storage import StorageManager  # StorageManager Import hinzugefügt
