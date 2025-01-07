@@ -8,3 +8,4 @@ aiofiles==23.2.1
 pytest==7.4.3
 black==23.10.1
 flake8==6.1.0
+imagehash==4.2.1
