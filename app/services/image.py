@@ -37,16 +37,28 @@ class ImageProcessor:
         
     async def optimize_image(self, image_data: bytes, image_hash: str, size: Any = None):
         """Optimiert ein Bild asynchron in verschiedene Formate"""
-        # Lade Bild in pyvips
-        image = pyvips.Image.new_from_buffer(image_data, "")
-        
-        # Größenanpassung wenn nötig
-        if size:
-            image = self._resize_image(image, size)
-        
-        # Erzeuge verschiedene Formate parallel
-        await self.executor.submit(self._create_avif, image, image_hash)
-        await self.executor.submit(self._create_webp, image, image_hash)
+        print("Starting image optimization")
+        try:
+            # Lade Bild in pyvips
+            image = pyvips.Image.new_from_buffer(image_data, "")
+            print("Image loaded into pyvips")
+            
+            # Größenanpassung wenn nötig
+            if size:
+                print(f"Resizing image to {size}")
+                image = self._resize_image(image, size)
+            
+            print("Starting format conversion")
+            # Erzeuge verschiedene Formate parallel
+            await self.executor.submit(self._create_avif, image, image_hash)
+            await self.executor.submit(self._create_webp, image, image_hash)
+            print("Format conversion complete")
+            
+        except Exception as e:
+            print(f"Error in optimize_image: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            raise
         
     def parse_html_tag(self, html: str) -> Dict[str, Any]:
         """Extrahiert Bild und Attribute aus HTML Tag"""
@@ -142,16 +154,25 @@ class ImageProcessor:
         
     def _create_avif(self, image: pyvips.Image, image_hash: str):
         """Erstellt eine AVIF Version des Bildes"""
-        image.write_to_file(
-            f"{settings.STORAGE_PATH}/processed/avif/{image_hash}.avif",
-            effort=settings.AVIF_EFFORT
-        )
+        output_path = f"{settings.STORAGE_PATH}/processed/avif/{image_hash}.avif"
+        print(f"Creating AVIF at: {output_path}")
+        try:
+            image.write_to_file(output_path, effort=settings.AVIF_EFFORT)
+            print("AVIF creation successful")
+        except Exception as e:
+            print(f"Error creating AVIF: {str(e)}")
+            raise
         
     def _create_webp(self, image: pyvips.Image, image_hash: str):
         """Erstellt eine WebP Version des Bildes"""
-        image.write_to_file(
-            f"{settings.STORAGE_PATH}/processed/webp/{image_hash}.webp"
-        )
+        output_path = f"{settings.STORAGE_PATH}/processed/webp/{image_hash}.webp"
+        print(f"Creating WebP at: {output_path}")
+        try:
+            image.write_to_file(output_path)
+            print("WebP creation successful")
+        except Exception as e:
+            print(f"Error creating WebP: {str(e)}")
+            raise
 
     def _format_exists(self, image_hash: str, format: str) -> bool:
         """Prüft ob ein bestimmtes Format existiert"""

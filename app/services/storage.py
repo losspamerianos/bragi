@@ -36,6 +36,8 @@ class StorageManager:
         """Prüft ob bereits optimierte Versionen existieren"""
         avif_path = Path(f"{settings.STORAGE_PATH}/processed/avif/{image_hash}.avif")
         webp_path = Path(f"{settings.STORAGE_PATH}/processed/webp/{image_hash}.webp")
+        print(f"Checking paths:\nAVIF: {avif_path}\nWebP: {webp_path}")
+        print(f"Exist?: AVIF: {avif_path.exists()}, WebP: {webp_path.exists()}")
         return avif_path.exists() and webp_path.exists()
 
     def get_optimized_url(self, image_hash: str) -> str:
