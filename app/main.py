@@ -46,7 +46,51 @@ image_processor = ImageProcessor()
 storage_manager = StorageManager()
 
 # Routes
-@app.post("/api/url", response_model=ImageResponse)  # Trailing slash hinzugefügt
+@app.post("/api/url", response_model=ImageResponse)
+async def process_image_url(request: ImageUrlRequest, background_tasks: BackgroundTasks):
+    try:
+        # Erstelle erstmal einen vorläufigen Hash aus der URL
+        url_hash = hashlib.sha256(str(request.url).encode()).hexdigest()
+        
+        # Prüfe zunächst nur, ob bereits eine optimierte Version existiert
+        if storage_manager.optimized_exists(url_hash):
+            return ImageResponse(
+                original_url=str(request.url),
+                status="complete",
+                optimized_url=storage_manager.get_optimized_url(url_hash),
+                formats=storage_manager.get_available_formats(url_hash)
+            )
+        
+        # Starte den kompletten Prozess im Hintergrund
+        background_tasks.add_task(
+            image_processor.process_url,
+            request.url,
+            url_hash,
+            size=request.size
+        )
+        
+        return ImageResponse(
+            original_url=str(request.url),
+            status="working",
+            check_url=f"/api/status/{url_hash}"  # URL zum Status-Check
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/status/{image_hash}", response_model=ImageResponse)
+async def check_image_status(image_hash: str):
+    """Prüft den Status einer Bildverarbeitung"""
+    if storage_manager.optimized_exists(image_hash):
+        return ImageResponse(
+            original_url="",  # Hier könnten wir die Original-URL in einer DB speichern
+            status="complete",
+            optimized_url=storage_manager.get_optimized_url(image_hash),
+            formats=storage_manager.get_available_formats(image_hash)
+        )
+    return ImageResponse(
+        original_url="",
+        status="working"
+    )  # Trailing slash hinzugefügt
 async def process_image_url(request: ImageUrlRequest, background_tasks: BackgroundTasks):
     # Validiere URL und hole Bild
     try:
