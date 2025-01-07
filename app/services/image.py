@@ -8,6 +8,7 @@ import imagehash
 from PIL import Image
 import io
 import hashlib
+import os
 
 from ..config import settings
 from .storage import StorageManager  # StorageManager Import hinzugefügt
