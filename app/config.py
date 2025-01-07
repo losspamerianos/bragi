@@ -33,9 +33,18 @@ class Settings(BaseSettings):
     def allowed_hosts_list(self) -> List[str]:
         return [host.strip() for host in self.ALLOWED_HOSTS.split(",")]
 
-    @property
     def cors_origins_list(self) -> List[str]:
-        return [origin.strip() for origin in self.CORS_ALLOWED_ORIGINS.split(",")]
+        """
+        Zerlegt die Komma-separierte Liste aus der .env.
+        Wenn du * in der .env erlauben willst, kannst du hier
+        z. B. eine Abfrage einbauen, um 'allow_origins = ["*"]' zu ermöglichen.
+        """
+        raw_origins = [origin.strip() for origin in self.CORS_ALLOWED_ORIGINS.split(",")]
+
+        # Beispiel: Unterstützung für einen Eintrag "*" in der .env
+        if "*" in raw_origins:
+            return ["*"]
+        return raw_origins
 
 # Instantiate the settings
 settings = Settings()

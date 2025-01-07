@@ -1,8 +1,7 @@
+# main.py
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
-
 from typing import List, Optional, Union
 from pydantic import BaseModel, HttpUrl
-import asyncio
 import hashlib
 
 from .config import settings
@@ -15,14 +14,20 @@ app = FastAPI(
     redirect_slashes=False
 )
 
+# ---------------------------------------------------
+# CORS Middleware
+# ---------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins_list,  # This picks up the .env value
+    allow_origins=settings.cors_origins_list,  # aus .env / config.py
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
 )
 
+# ---------------------------------------------------
+# Auth / Secret Middleware
+# ---------------------------------------------------
 @app.middleware("http")
 async def verify_secret(request: Request, call_next):
     auth_header = request.headers.get("Authorization")
@@ -30,7 +35,9 @@ async def verify_secret(request: Request, call_next):
         raise HTTPException(status_code=403, detail="Unauthorized")
     return await call_next(request)
 
+# ---------------------------------------------------
 # Models
+# ---------------------------------------------------
 class ImageUrlRequest(BaseModel):
     url: HttpUrl
     size: Optional[Union[int, str]] = None  # px oder %
@@ -48,18 +55,25 @@ class ImageResponse(BaseModel):
     optimized_url: Optional[str] = None
     formats: Optional[dict] = None
 
+class HtmlResponse(BaseModel):
+    original_html: str
+    status: str  # "working" oder "complete"
+    optimized_html: Optional[str] = None
+
+# ---------------------------------------------------
 # Services
+# ---------------------------------------------------
 storage_manager = StorageManager()
 image_processor = ImageProcessor()
 
+# ---------------------------------------------------
 # Routes
+# ---------------------------------------------------
 @app.post("/api/url", response_model=ImageResponse)
 async def process_image_url(request: ImageUrlRequest, background_tasks: BackgroundTasks):
     try:
-        # Hash aus URL generieren
         url_hash = hashlib.sha256(str(request.url).encode()).hexdigest()
         
-        # Prüfen ob optimierte Versionen existieren
         if storage_manager.optimized_exists(url_hash):
             return ImageResponse(
                 original_url=str(request.url),
@@ -68,7 +82,6 @@ async def process_image_url(request: ImageUrlRequest, background_tasks: Backgrou
                 formats=storage_manager.get_available_formats(url_hash)
             )
         
-        # Wenn nicht, im Hintergrund verarbeiten
         background_tasks.add_task(
             image_processor.process_url,
             request.url,
@@ -76,7 +89,6 @@ async def process_image_url(request: ImageUrlRequest, background_tasks: Backgrou
             size=request.size
         )
         
-        # Sofort "working" zurückgeben
         return ImageResponse(
             original_url=str(request.url),
             status="working"
@@ -84,11 +96,6 @@ async def process_image_url(request: ImageUrlRequest, background_tasks: Backgrou
         
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-class HtmlResponse(BaseModel):
-    original_html: str
-    status: str  # "working" oder "complete"
-    optimized_html: Optional[str] = None
 
 @app.post("/api/html", response_model=HtmlResponse)
 async def process_html_tag(request: HtmlTagRequest, background_tasks: BackgroundTasks):
@@ -99,7 +106,6 @@ async def process_html_tag(request: HtmlTagRequest, background_tasks: Background
             
         url_hash = hashlib.sha256(image_data['url'].encode()).hexdigest()
         
-        # Prüfen ob bereits optimierte Versionen existieren
         if storage_manager.optimized_exists(url_hash):
             return HtmlResponse(
                 original_html=request.html,
@@ -110,14 +116,12 @@ async def process_html_tag(request: HtmlTagRequest, background_tasks: Background
                 )
             )
             
-        # Verarbeitung im Hintergrund starten
         background_tasks.add_task(
             image_processor.process_url,
             image_data['url'],
             url_hash
         )
         
-        # Original HTML zurückgeben mit working status
         return HtmlResponse(
             original_html=request.html,
             status="working"
