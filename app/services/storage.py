@@ -42,7 +42,7 @@ class StorageManager:
 
     def get_optimized_url(self, image_hash: str) -> str:
         """Gibt die URL der optimierten Version zurück"""
-        return f"/storage/processed/avif/{image_hash}.avif"
+        return f"http://{settings.HOST}:{settings.PORT}/storage/processed/avif/{image_hash}.avif"
 
     def get_available_formats(self, image_hash: str) -> Dict[str, str]:
         """Gibt URLs für alle verfügbaren Formate zurück"""
