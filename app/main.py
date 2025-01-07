@@ -19,6 +19,10 @@ app = FastAPI(
 # ---------------------------------------------------
 @app.middleware("http")
 async def verify_secret(request: Request, call_next):
+    # Skip authentication for storage/processed paths
+    if request.url.path.startswith("/storage/processed"):
+        return await call_next(request)
+        
     auth_header = request.headers.get("Authorization")
     if auth_header != f"Bearer {settings.BRAGI_SECRET_KEY}":
         raise HTTPException(status_code=403, detail="Unauthorized")
