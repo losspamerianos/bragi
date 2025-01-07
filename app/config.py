@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     CORS_ALLOWED_ORIGINS: str = "http://localhost:8000,http://127.0.0.1:8000"
     STORAGE_PATH: str = "/app/storage"
     MAX_FILE_SIZE: int = 10
-    SECRET_KEY: str = "your_secret_key"
+    BRAGI_SECRET_KEY: str = "your_secret_key"
 
     # Image Processing Settings
     SUPPORTED_FORMATS: List[str] = ["jpg", "jpeg", "png", "webp"]
