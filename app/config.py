@@ -30,20 +30,14 @@ class Settings(BaseSettings):
         env_file_encoding = "utf-8"
 
     @property
-    def cors_origins_list(self) -> List[str]:
-        return [origin.strip() for origin in self.CORS_ALLOWED_ORIGINS.split(",")]
+    def allowed_hosts_list(self) -> List[str]:
+        return [host.strip() for host in self.ALLOWED_HOSTS.split(",")]
 
-    def cors_origins_list(self) -> List[str]:
-        """
-        Zerlegt die Komma-separierte Liste aus der .env.
-        Wenn du * in der .env erlauben willst, kannst du hier
-        z. B. eine Abfrage einbauen, um 'allow_origins = ["*"]' zu ermöglichen.
-        """
-        raw_origins = [origin.strip() for origin in self.CORS_ALLOWED_ORIGINS.split(",")]
-
-        # Beispiel: Unterstützung für einen Eintrag "*" in der .env
+    @property
+    def cors_origins_list(self):
+        raw_origins = [o.strip() for o in self.CORS_ALLOWED_ORIGINS.split(",")]
         if "*" in raw_origins:
-            return ["*"]
+            return ["*"]  # Alle erlauben
         return raw_origins
 
 # Instantiate the settings
