@@ -87,6 +87,7 @@ async def process_html_tag(request: HtmlTagRequest, background_tasks: Background
             
         url_hash = hashlib.sha256(image_data['url'].encode()).hexdigest()
         
+        # Prüfen ob bereits optimierte Versionen existieren
         if storage_manager.optimized_exists(url_hash):
             return image_processor.create_picture_tag(
                 url_hash,

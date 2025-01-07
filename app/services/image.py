@@ -64,11 +64,11 @@ class ImageProcessor:
         """Extrahiert Bild und Attribute aus HTML Tag"""
         soup = BeautifulSoup(html, 'html.parser')
         img = soup.find('img')
-        if not img:
+        if not img or 'src' not in img.attrs:
             return None
             
         return {
-            'content': self._fetch_image(img['src']),
+            'url': img['src'],  # Wir geben nur die URL zurück
             'attributes': dict(img.attrs)
         }
         
