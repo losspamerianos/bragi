@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
-from fastapi.middleware.cors import CORSMiddleware
+
 from typing import List, Optional, Union
 from pydantic import BaseModel, HttpUrl
 import asyncio
