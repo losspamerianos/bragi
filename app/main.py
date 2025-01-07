@@ -42,7 +42,7 @@ image_processor = ImageProcessor()
 storage_manager = StorageManager()
 
 # Routes
-@app.post("/api/url", response_model=ImageResponse)
+@app.post("/api/url/", response_model=ImageResponse)  # Trailing slash hinzugefügt
 async def process_image_url(request: ImageUrlRequest, background_tasks: BackgroundTasks):
     # Validiere URL und hole Bild
     try:
