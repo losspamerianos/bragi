@@ -49,9 +49,9 @@ class ImageProcessor:
                 image = self._resize_image(image, size)
             
             print("Starting format conversion")
-            # Erzeuge verschiedene Formate parallel
-            await self.executor.submit(self._create_avif, image, image_hash)
-            await self.executor.submit(self._create_webp, image, image_hash)
+            # Erzeuge verschiedene Formate - direkt, nicht über ThreadPool
+            self._create_avif(image, image_hash)
+            self._create_webp(image, image_hash)
             print("Format conversion complete")
             
         except Exception as e:
