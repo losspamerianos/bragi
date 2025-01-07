@@ -18,7 +18,7 @@ app = FastAPI(
 @app.middleware("http")
 async def verify_secret(request: Request, call_next):
     auth_header = request.headers.get("Authorization")
-    if auth_header != f"Bearer {SECRET_KEY}":
+    if auth_header != f"Bearer {settings.SECRET_KEY}":
         raise HTTPException(status_code=403, detail="Unauthorized")
     return await call_next(request)
 
