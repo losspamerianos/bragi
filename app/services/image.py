@@ -186,4 +186,4 @@ class ImageProcessor:
         """Generiert die URL für ein bestimmtes Format"""
         if format == "original":
             return f"/storage/originals/{image_hash}"
-        return f"http://{settings.HOST}:{settings.PORT}/storage/processed/{format}/{image_hash}.{format}"
+        return f"http://{settings.HOST}/storage/processed/{format}/{image_hash}.{format}"
