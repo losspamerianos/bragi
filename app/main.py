@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Union
 from pydantic import BaseModel, HttpUrl
@@ -14,14 +14,13 @@ app = FastAPI(
     redirect_slashes=False
 )
 
-# CORS Middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+@app.middleware("http")
+async def verify_secret(request: Request, call_next):
+    auth_header = request.headers.get("Authorization")
+    if auth_header != f"Bearer {SECRET_KEY}":
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    return await call_next(request)
 
 # Models
 class ImageUrlRequest(BaseModel):

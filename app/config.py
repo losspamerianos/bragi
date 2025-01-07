@@ -37,6 +37,7 @@ def get_settings():
         PORT=int(os.getenv("PORT", "8000")),
         ALLOWED_HOSTS=os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1"),
         CORS_ALLOWED_ORIGINS=os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000"),
+        SECRET_KEY=os.getenv("SECRET_KEY", "your_secret_key"),
         STORAGE_PATH=os.getenv("STORAGE_PATH", "/app/storage"),
         MAX_FILE_SIZE=int(os.getenv("MAX_FILE_SIZE", "10"))
     )
