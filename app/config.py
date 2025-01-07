@@ -30,8 +30,8 @@ class Settings(BaseSettings):
         env_file_encoding = "utf-8"
 
     @property
-    def allowed_hosts_list(self) -> List[str]:
-        return [host.strip() for host in self.ALLOWED_HOSTS.split(",")]
+    def cors_origins_list(self) -> List[str]:
+        return [origin.strip() for origin in self.CORS_ALLOWED_ORIGINS.split(",")]
 
     def cors_origins_list(self) -> List[str]:
         """
