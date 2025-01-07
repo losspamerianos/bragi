@@ -1,5 +1,5 @@
-# main.py
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
+from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Union
 from pydantic import BaseModel, HttpUrl
 import hashlib
@@ -7,22 +7,11 @@ import hashlib
 from .config import settings
 from .services.image import ImageProcessor
 from .services.storage import StorageManager
-from fastapi.middleware.cors import CORSMiddleware
+
 
 app = FastAPI(
     title="Bragi Image Server",
     redirect_slashes=False
-)
-
-# ---------------------------------------------------
-# CORS Middleware
-# ---------------------------------------------------
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
 )
 
 # ---------------------------------------------------
@@ -34,6 +23,19 @@ async def verify_secret(request: Request, call_next):
     if auth_header != f"Bearer {settings.BRAGI_SECRET_KEY}":
         raise HTTPException(status_code=403, detail="Unauthorized")
     return await call_next(request)
+
+# ---------------------------------------------------
+# CORS Middleware
+# ---------------------------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 
 # ---------------------------------------------------
 # Models

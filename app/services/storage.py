@@ -2,7 +2,7 @@ import aiohttp
 import hashlib
 import os
 from typing import Dict, Optional
-import aiofiles
+import aiofiles # type: ignore
 import mimetypes
 from pathlib import Path
 

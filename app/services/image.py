@@ -1,8 +1,8 @@
 import os
 import io
 import cv2
-import pyvips
-import imagehash
+import pyvips # type: ignore
+import imagehash # type: ignore
 import hashlib
 
 import numpy as np
