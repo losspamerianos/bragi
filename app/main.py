@@ -8,7 +8,11 @@ from .config import settings
 from .services.image import ImageProcessor
 from .services.storage import StorageManager
 
-app = FastAPI(title="Bragi Image Server")
+app = FastAPI(
+    title="Bragi Image Server",
+    # Deaktiviere automatische Redirects für trailing slashes
+    redirect_slashes=False
+)
 
 # CORS Middleware
 app.add_middleware(
@@ -42,7 +46,7 @@ image_processor = ImageProcessor()
 storage_manager = StorageManager()
 
 # Routes
-@app.post("/api/url/", response_model=ImageResponse)  # Trailing slash hinzugefügt
+@app.post("/api/url", response_model=ImageResponse)  # Trailing slash hinzugefügt
 async def process_image_url(request: ImageUrlRequest, background_tasks: BackgroundTasks):
     # Validiere URL und hole Bild
     try:
