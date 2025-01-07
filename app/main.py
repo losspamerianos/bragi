@@ -78,7 +78,12 @@ async def process_image_url(request: ImageUrlRequest, background_tasks: Backgrou
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/html")
+class HtmlResponse(BaseModel):
+    original_html: str
+    status: str  # "working" oder "complete"
+    optimized_html: Optional[str] = None
+
+@app.post("/api/html", response_model=HtmlResponse)
 async def process_html_tag(request: HtmlTagRequest, background_tasks: BackgroundTasks):
     try:
         image_data = image_processor.parse_html_tag(request.html)
@@ -89,9 +94,13 @@ async def process_html_tag(request: HtmlTagRequest, background_tasks: Background
         
         # Prüfen ob bereits optimierte Versionen existieren
         if storage_manager.optimized_exists(url_hash):
-            return image_processor.create_picture_tag(
-                url_hash,
-                image_data['attributes']
+            return HtmlResponse(
+                original_html=request.html,
+                status="complete",
+                optimized_html=image_processor.create_picture_tag(
+                    url_hash,
+                    image_data['attributes']
+                )
             )
             
         # Verarbeitung im Hintergrund starten
@@ -101,8 +110,11 @@ async def process_html_tag(request: HtmlTagRequest, background_tasks: Background
             url_hash
         )
         
-        # Original HTML zurückgeben
-        return request.html
+        # Original HTML zurückgeben mit working status
+        return HtmlResponse(
+            original_html=request.html,
+            status="working"
+        )
         
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
