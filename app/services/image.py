@@ -20,19 +20,16 @@ class ImageProcessor:
     async def process_url(self, url: str, url_hash: str, size: Any = None):
         """Verarbeitet eine URL komplett im Hintergrund"""
         try:
-            print(f"Starting to process URL: {url}")
             # Hole das Bild
             image_data = await self.storage_manager.fetch_image(url)
-            print(f"Image fetched, size: {len(image_data)} bytes")
             
             # Speichere Original
-            await self.storage_manager.save_original(image_data, url_hash, ".jpg")
-            print(f"Original image saved with hash: {url_hash}")
+            extension = self.storage_manager.get_file_extension("image/jpeg")  # Fallback
+            await self.storage_manager.save_original(image_data, url_hash, extension)
             
             # Optimiere es
-            print("Starting optimization...")
             await self.optimize_image(image_data, url_hash, size)
-            print("Optimization complete!")
+            
         except Exception as e:
             print(f"Error processing {url}: {str(e)}")
             import traceback
