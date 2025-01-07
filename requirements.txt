@@ -10,4 +10,8 @@ pytest==7.4.3
 black==23.10.1
 flake8==6.1.0
 imagehash==4.2.1
-beautifulsoup4
+beautifulsoup4==4.12.2
+opencv-python-headless==4.8.0.76
+Pillow==10.0.0
+numpy==1.24.3
+aiohttp==3.8.6
