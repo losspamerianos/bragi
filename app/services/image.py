@@ -7,8 +7,10 @@ from typing import List, Dict, Any, Tuple
 import imagehash
 from PIL import Image
 import io
+import hashlib
 
 from ..config import settings
+from .storage import StorageManager  # StorageManager Import hinzugefügt
 
 class ImageProcessor:
     def __init__(self):
@@ -144,3 +146,14 @@ class ImageProcessor:
         image.write_to_file(
             f"{settings.STORAGE_PATH}/processed/webp/{image_hash}.webp"
         )
+
+    def _format_exists(self, image_hash: str, format: str) -> bool:
+        """Prüft ob ein bestimmtes Format existiert"""
+        path = f"{settings.STORAGE_PATH}/processed/{format}/{image_hash}.{format}"
+        return os.path.exists(path)
+
+    def _get_url(self, image_hash: str, format: str) -> str:
+        """Generiert die URL für ein bestimmtes Format"""
+        if format == "original":
+            return f"/storage/originals/{image_hash}"
+        return f"/storage/processed/{format}/{image_hash}.{format}"
