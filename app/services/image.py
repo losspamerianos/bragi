@@ -13,6 +13,19 @@ from ..config import settings
 class ImageProcessor:
     def __init__(self):
         self.executor = ThreadPoolExecutor(max_workers=settings.MAX_WORKERS)
+        self.storage_manager = StorageManager()
+        
+    async def process_url(self, url: str, url_hash: str, size: Any = None):
+        """Verarbeitet eine URL komplett im Hintergrund"""
+        try:
+            # Hole das Bild
+            image_data = await self.storage_manager.fetch_image(url)
+            
+            # Optimiere es
+            await self.optimize_image(image_data, url_hash, size)
+        except Exception as e:
+            print(f"Error processing {url}: {str(e)}")
+            # Hier könnten wir später noch eine bessere Fehlerbehandlung einbauen
         
     async def optimize_image(self, image_data: bytes, image_hash: str, size: Any = None):
         """Optimiert ein Bild asynchron in verschiedene Formate"""
