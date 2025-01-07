@@ -8,12 +8,20 @@ import hashlib
 from .config import settings
 from .services.image import ImageProcessor
 from .services.storage import StorageManager
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="Bragi Image Server",
     redirect_slashes=False
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,  # This picks up the .env value
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
 @app.middleware("http")
 async def verify_secret(request: Request, call_next):
