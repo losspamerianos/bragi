@@ -105,7 +105,7 @@ async def shutdown_event():
 # ---------------------------------------------------
 class ImageUrlRequest(BaseModel):
     url: HttpUrl
-    size: Optional[Union[int, str]] = None
+    size: Optional[int] = None
 
 class HtmlTagRequest(BaseModel):
     html: str
@@ -119,6 +119,7 @@ class ImageResponse(BaseModel):
     status: str
     optimized_url: Optional[str] = None
     formats: Optional[dict] = None
+    dimensions: Optional[dict] = None
 
 class HtmlResponse(BaseModel):
     original_html: str
@@ -175,65 +176,55 @@ async def health_check():
         "processing": processing_count
     }
 
+class ImageResponse(BaseModel):
+    original_url: str
+    status: str
+    optimized_url: Optional[str] = None
+    formats: Optional[dict] = None
+    dimensions: Optional[dict] = None
+
 @app.post("/api/url", response_model=ImageResponse)
 async def process_image_url(request: ImageUrlRequest):
     try:
         url_hash = hashlib.sha256(str(request.url).encode()).hexdigest()
         
-        # Check cache first
         cached_status = await cache_service.get_image_status(url_hash)
-        if cached_status:
-            if cached_status["status"] == ProcessingStatus.COMPLETE:
-                return ImageResponse(
-                    original_url=str(request.url),
-                    status="complete",
-                    optimized_url=cached_status["metadata"]["optimized_url"],
-                    formats=cached_status["metadata"]["formats"]
-                )
+        if cached_status and cached_status["status"] == ProcessingStatus.COMPLETE:
             return ImageResponse(
                 original_url=str(request.url),
-                status=cached_status["status"]
+                status="complete",
+                optimized_url=cached_status["metadata"]["optimized_url"],
+                formats=cached_status["metadata"]["formats"],
+                dimensions=cached_status["metadata"]["dimensions"]
             )
-        
-        # Check if already processed
+
         if storage_manager.optimized_exists(url_hash):
+            formats = {}
+            dimensions = await image_processor.process_url(str(request.url), url_hash, request.size)
+            
+            for format_type in ['avif', 'webp']:
+                formats[format_type] = storage_manager.get_optimized_url(url_hash, format_type)
+                if request.size:
+                    formats[f"{format_type}_{request.size}"] = storage_manager.get_optimized_url(
+                        url_hash, format_type, request.size
+                    )
+            
+            formats['original'] = storage_manager.get_optimized_url(url_hash, 'original')
+            
             response_data = {
                 "original_url": str(request.url),
                 "status": "complete",
-                "optimized_url": storage_manager.get_optimized_url(url_hash),
-                "formats": storage_manager.get_available_formats(url_hash)
+                "optimized_url": formats['avif'],
+                "formats": formats,
+                "dimensions": dimensions
             }
+            
             await cache_service.set_image_status(
                 url_hash,
                 ProcessingStatus.COMPLETE,
                 metadata=response_data
             )
             return ImageResponse(**response_data)
-        
-        # Try to acquire processing lock
-        if not await cache_service.acquire_lock(url_hash):
-            # Already being processed
-            cached_status = await cache_service.get_image_status(url_hash)
-            return ImageResponse(
-                original_url=str(request.url),
-                status=cached_status["status"] if cached_status else "processing"
-            )
-        
-        # Queue new processing task
-        await cache_service.set_image_status(url_hash, ProcessingStatus.PENDING)
-        await queue_service.enqueue_task(
-            "process_image",
-            {
-                "url": str(request.url),
-                "url_hash": url_hash,
-                "size": request.size
-            }
-        )
-        
-        return ImageResponse(
-            original_url=str(request.url),
-            status="pending"
-        )
         
     except Exception as e:
         if url_hash:
@@ -245,8 +236,6 @@ async def process_bulk_urls(request: BulkUrlRequest):
     try:
         responses = []
         tasks = []
-        
-        # First, get all hashes and check cache in bulk
         url_hashes = [
             hashlib.sha256(str(item.url).encode()).hexdigest()
             for item in request.items
@@ -262,7 +251,8 @@ async def process_bulk_urls(request: BulkUrlRequest):
                     original_url=str(item.url),
                     status="complete",
                     optimized_url=cached_status["metadata"]["optimized_url"],
-                    formats=cached_status["metadata"]["formats"]
+                    formats=cached_status["metadata"]["formats"],
+                    dimensions=cached_status["metadata"]["dimensions"]
                 ))
                 continue
                 
@@ -273,14 +263,27 @@ async def process_bulk_urls(request: BulkUrlRequest):
                 ))
                 continue
             
-            # Check storage
             if storage_manager.optimized_exists(url_hash):
+                dimensions = await image_processor.process_url(str(item.url), url_hash, item.size)
+                formats = {}
+                
+                for format_type in ['avif', 'webp']:
+                    formats[format_type] = storage_manager.get_optimized_url(url_hash, format_type)
+                    if item.size:
+                        formats[f"{format_type}_{item.size}"] = storage_manager.get_optimized_url(
+                            url_hash, format_type, item.size
+                        )
+                
+                formats['original'] = storage_manager.get_optimized_url(url_hash, 'original')
+                
                 response_data = {
                     "original_url": str(item.url),
                     "status": "complete",
-                    "optimized_url": storage_manager.get_optimized_url(url_hash),
-                    "formats": storage_manager.get_available_formats(url_hash)
+                    "optimized_url": formats['avif'],
+                    "formats": formats,
+                    "dimensions": dimensions
                 }
+                
                 await cache_service.set_image_status(
                     url_hash,
                     ProcessingStatus.COMPLETE,
@@ -289,7 +292,6 @@ async def process_bulk_urls(request: BulkUrlRequest):
                 responses.append(ImageResponse(**response_data))
                 continue
             
-            # Try to acquire lock
             if not await cache_service.acquire_lock(url_hash):
                 cached_status = await cache_service.get_image_status(url_hash)
                 responses.append(ImageResponse(
@@ -298,7 +300,6 @@ async def process_bulk_urls(request: BulkUrlRequest):
                 ))
                 continue
             
-            # Queue new task
             tasks.append({
                 "task_type": "process_image",
                 "payload": {
@@ -314,14 +315,12 @@ async def process_bulk_urls(request: BulkUrlRequest):
                 status="pending"
             ))
         
-        # Enqueue all new tasks at once
         if tasks:
             await queue_service.enqueue_bulk_tasks(tasks)
         
         return responses
         
     except Exception as e:
-        # Release any acquired locks
         for url_hash in url_hashes:
             await cache_service.release_lock(url_hash)
         raise HTTPException(status_code=400, detail=str(e))

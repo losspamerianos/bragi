@@ -21,22 +21,32 @@ class ImageProcessor:
         self.storage_manager = StorageManager()
         
     async def process_url(self, url: str, url_hash: str, size: Any = None):
-        """Verarbeitet eine URL komplett im Hintergrund"""
+        dimensions = {}
         try:
-            # Hole das Bild
             image_data = await self.storage_manager.fetch_image(url)
-            
-            # Speichere Original
-            extension = self.storage_manager.get_file_extension("image/jpeg")  # Fallback
+            extension = self.storage_manager.get_file_extension("image/jpeg")
             await self.storage_manager.save_original(image_data, url_hash, extension)
+
+            image = pyvips.Image.new_from_buffer(image_data, "")
+            dimensions['original'] = f"{image.width}x{image.height}"
+
+            if size:
+                scale = size/image.width
+                resized = image.resize(scale)
+                dimensions[f"{size}"] = f"{resized.width}x{resized.height}"
+                self._create_avif(resized, f"{url_hash}-{size}")
+                self._create_webp(resized, f"{url_hash}-{size}")
             
-            # Optimiere es
-            await self.optimize_image(image_data, url_hash, size)
+            self._create_avif(image, url_hash)
+            self._create_webp(image, url_hash)
             
+            return dimensions
+
         except Exception as e:
             print(f"Error processing {url}: {str(e)}")
             import traceback
             print(traceback.format_exc())
+            raise
         
     async def optimize_image(self, image_data: bytes, image_hash: str, size: Any = None):
         """Optimiert ein Bild asynchron in verschiedene Formate"""
@@ -177,13 +187,15 @@ class ImageProcessor:
             print(f"Error creating WebP: {str(e)}")
             raise
 
-    def _format_exists(self, image_hash: str, format: str) -> bool:
-        """Prüft ob ein bestimmtes Format existiert"""
-        path = f"{settings.STORAGE_PATH}/processed/{format}/{image_hash}.{format}"
+    def _format_exists(self, image_hash: str, format: str, size: int = None) -> bool:
+        size_suffix = f"-{size}" if size else ""
+        path = f"{settings.STORAGE_PATH}/processed/{format}/{image_hash}{size_suffix}.{format}"
         return os.path.exists(path)
 
-    def _get_url(self, image_hash: str, format: str) -> str:
-        """Generiert die URL für ein bestimmtes Format"""
+    def _get_url(self, image_hash: str, format: str, size: int = None) -> str:
+        base = f"{settings.HOST}/storage/processed"
         if format == "original":
             return f"/storage/originals/{image_hash}"
-        return f"{settings.HOST}/storage/processed/{format}/{image_hash}.{format}"
+        
+        size_suffix = f"-{size}" if size else ""
+        return f"{base}/{format}/{image_hash}{size_suffix}.{format}"
