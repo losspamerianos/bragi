@@ -190,17 +190,18 @@ async def process_image_url(request: ImageUrlRequest):
         
         cached_status = await cache_service.get_image_status(url_hash)
         if cached_status and cached_status["status"] == ProcessingStatus.COMPLETE:
+            metadata = cached_status.get("metadata", {})
             return ImageResponse(
                 original_url=str(request.url),
                 status="complete",
-                optimized_url=cached_status["metadata"]["optimized_url"],
-                formats=cached_status["metadata"]["formats"],
-                dimensions=cached_status["metadata"]["dimensions"]
+                optimized_url=metadata.get("optimized_url"),
+                formats=metadata.get("formats"),
+                dimensions=metadata.get("dimensions", {})
             )
 
         if storage_manager.optimized_exists(url_hash):
-            formats = {}
             dimensions = await image_processor.process_url(str(request.url), url_hash, request.size)
+            formats = {}
             
             for format_type in ['avif', 'webp']:
                 formats[format_type] = storage_manager.get_optimized_url(url_hash, format_type)
@@ -216,7 +217,7 @@ async def process_image_url(request: ImageUrlRequest):
                 "status": "complete",
                 "optimized_url": formats['avif'],
                 "formats": formats,
-                "dimensions": dimensions
+                "dimensions": dimensions or {}
             }
             
             await cache_service.set_image_status(
@@ -247,12 +248,13 @@ async def process_bulk_urls(request: BulkUrlRequest):
             cached_status = cached_statuses.get(url_hash)
             
             if cached_status and cached_status["status"] == ProcessingStatus.COMPLETE:
+                metadata = cached_status.get("metadata", {})
                 responses.append(ImageResponse(
                     original_url=str(item.url),
                     status="complete",
-                    optimized_url=cached_status["metadata"]["optimized_url"],
-                    formats=cached_status["metadata"]["formats"],
-                    dimensions=cached_status["metadata"]["dimensions"]
+                    optimized_url=metadata.get("optimized_url"),
+                    formats=metadata.get("formats"),
+                    dimensions=metadata.get("dimensions", {})
                 ))
                 continue
                 
@@ -281,7 +283,7 @@ async def process_bulk_urls(request: BulkUrlRequest):
                     "status": "complete",
                     "optimized_url": formats['avif'],
                     "formats": formats,
-                    "dimensions": dimensions
+                    "dimensions": dimensions or {}
                 }
                 
                 await cache_service.set_image_status(
