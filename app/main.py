@@ -6,12 +6,14 @@ import hashlib
 import asyncio
 from prometheus_client import Counter, Histogram
 from prometheus_fastapi_instrumentator import Instrumentator # type: ignore
+import logging
 
 from .config import settings
 from .services.image import ImageProcessor
 from .services.storage import StorageManager
 from .services.cache import CacheService, ProcessingStatus
 from .services.queue import QueueService
+
 
 # Metrics
 PROCESSING_TIME = Histogram(
@@ -92,15 +94,31 @@ class BulkUrlRequest(BaseModel):
 # ---------------------------------------------------
 @app.on_event("startup")
 async def startup_event():
-    # Connect to services
-    await cache_service.connect()
-    await queue_service.connect()
+    retries = 5
+    delay = 1
+    last_exception = None
     
-    # Start queue worker
-    asyncio.create_task(start_queue_worker())
+    for attempt in range(retries):
+        try:
+            # Connect to services
+            await cache_service.connect()
+            await queue_service.connect()
+            
+            # Start queue worker
+            asyncio.create_task(start_queue_worker())
+            
+            # Initialize metrics
+            Instrumentator().instrument(app).expose(app)
+            return
+            
+        except Exception as e:
+            last_exception = e
+            logging.warning(f"Startup attempt {attempt + 1} failed: {str(e)}")
+            await asyncio.sleep(delay)
+            delay *= 2  # Exponential backoff
     
-    # Initialize metrics
-    Instrumentator().instrument(app).expose(app)
+    logging.error("Failed to start application after multiple retries")
+    raise last_exception
 
 @app.on_event("shutdown")
 async def shutdown_event():
