@@ -1,8 +1,9 @@
 from typing import Optional, Dict, Any
-import aioredis # type: ignore
+from redis import asyncio as aioredis  # Verwenden das neue async redis
 import json
 from enum import Enum
 from datetime import datetime
+
 class ProcessingStatus(str, Enum):
     PENDING = "pending"
     PROCESSING = "processing"
@@ -16,12 +17,11 @@ class CacheService:
     
     async def connect(self):
         if not self.redis:
-            self.redis = await aioredis.create_redis_pool(self.redis_url)
+            self.redis = await aioredis.from_url(self.redis_url, decode_responses=True)
     
     async def close(self):
         if self.redis:
-            self.redis.close()
-            await self.redis.wait_closed()
+            await self.redis.close()
     
     async def get_image_status(self, url_hash: str) -> Optional[Dict[str, Any]]:
         """Get image processing status and metadata from cache"""
@@ -46,7 +46,7 @@ class CacheService:
         await self.redis.set(
             f"image:{url_hash}",
             json.dumps(data),
-            expire=expire
+            ex=expire
         )
     
     async def get_bulk_status(self, url_hashes: list[str]) -> Dict[str, Dict[str, Any]]:
@@ -75,7 +75,7 @@ class CacheService:
             pipe.set(
                 f"image:{url_hash}",
                 json.dumps(data),
-                expire=expire
+                ex=expire
             )
         await pipe.execute()
     
@@ -83,7 +83,7 @@ class CacheService:
         """Acquire a distributed lock for processing an image"""
         await self.connect()
         lock_key = f"lock:{url_hash}"
-        return await self.redis.set(lock_key, "1", expire=expire, exist=self.redis.SET_IF_NOT_EXIST)
+        return await self.redis.set(lock_key, "1", ex=expire, nx=True)
     
     async def release_lock(self, url_hash: str):
         """Release a distributed lock"""
@@ -93,5 +93,12 @@ class CacheService:
     async def get_queue_length(self) -> int:
         """Get number of images currently being processed"""
         await self.connect()
-        processing = await self.redis.keys("image:*")
-        return len([k for k in processing if await self.redis.hget(k, "status") == ProcessingStatus.PROCESSING])
+        keys = await self.redis.keys("image:*")
+        processing = 0
+        for key in keys:
+            data = await self.redis.get(key)
+            if data:
+                status_data = json.loads(data)
+                if status_data.get("status") == ProcessingStatus.PROCESSING:
+                    processing += 1
+        return processing
