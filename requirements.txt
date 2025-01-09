@@ -15,3 +15,6 @@ opencv-python-headless==4.8.0.76
 Pillow==10.0.0
 numpy==1.24.3
 aiohttp==3.8.6
+prometheus-fastapi-instrumentator
+aioredis==2.0.1
+aio_pika==8.0.0
