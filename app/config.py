@@ -1,9 +1,15 @@
 from pydantic_settings import BaseSettings
-from typing import List
-from pydantic import ConfigDict
+from typing import List, ClassVar
+from pydantic import model_validator, ConfigDict
 import os
 
 class Settings(BaseSettings):
+    model_config = ConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="allow"  # Dies sollte eigentlich zusätzliche Felder erlauben
+    )
+
     # Server Config
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
@@ -31,18 +37,12 @@ class Settings(BaseSettings):
     
     # Queue Processing Config
     MAX_CONCURRENT_TASKS: int = 5
-    TASK_TIMEOUT: int = 300  # 5 minutes
+    TASK_TIMEOUT: int = 300
     
     # Duplicate Detection Settings
     PHASH_THRESHOLD: float = 0.85
     HISTOGRAM_THRESHOLD: float = 0.90
     COMBINED_THRESHOLD: float = 0.85
-
-    model_config = ConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="allow"  # Erlaubt zusätzliche Felder
-    )
 
     @property
     def allowed_hosts_list(self) -> List[str]:
@@ -52,8 +52,15 @@ class Settings(BaseSettings):
     def cors_origins_list(self):
         raw_origins = [o.strip() for o in self.CORS_ALLOWED_ORIGINS.split(",")]
         if "*" in raw_origins:
-            return ["*"]  # Alle erlauben
+            return ["*"]
         return raw_origins
+
+    @model_validator(mode='after')
+    def validate_paths(self):
+        """Validate and create storage paths if they don't exist"""
+        os.makedirs(self.STORAGE_PATH, exist_ok=True)
+        os.makedirs(self.PROCESSED_PATH, exist_ok=True)
+        return self
 
 # Instantiate the settings
 settings = Settings()
