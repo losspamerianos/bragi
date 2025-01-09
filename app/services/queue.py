@@ -1,10 +1,11 @@
 from typing import Optional, Dict, Any, Callable
-import aio_pika # type: ignore
+import aio_pika
+from aio_pika.exceptions import AMQPConnectionError  # Korrekter Import
 import json
 import asyncio
 from functools import partial
 import logging
-import backoff  # Füge backoff zu requirements.txt hinzu
+import backoff
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ class QueueService:
 
     @backoff.on_exception(
         backoff.expo,
-        (aio_pika.AMQPConnectionError, ConnectionError),
+        (AMQPConnectionError, ConnectionError),  # Aktualisierter Exception-Typ
         max_tries=5,
         max_time=30
     )
