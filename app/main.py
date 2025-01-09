@@ -4,16 +4,15 @@ from typing import List, Optional, Union
 from pydantic import BaseModel, HttpUrl
 import hashlib
 import asyncio
-from prometheus_client import Counter, Histogram
-from prometheus_fastapi_instrumentator import Instrumentator # type: ignore
 import logging
+from prometheus_client import Counter, Histogram
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from .config import settings
 from .services.image import ImageProcessor
 from .services.storage import StorageManager
 from .services.cache import CacheService, ProcessingStatus
 from .services.queue import QueueService
-
 
 # Metrics
 PROCESSING_TIME = Histogram(
@@ -29,6 +28,9 @@ app = FastAPI(
     title="Bragi Image Server",
     redirect_slashes=False
 )
+
+# Initialize Prometheus instrumentation first
+Instrumentator().instrument(app).expose(app)
 
 # Initialize services
 storage_manager = StorageManager()
@@ -54,11 +56,49 @@ async def verify_secret(request: Request, call_next):
 # ---------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------------------------------------------------
+# Startup and Shutdown Events
+# ---------------------------------------------------
+@app.on_event("startup")
+async def startup_event():
+    retries = 5
+    delay = 1
+    last_exception = None
+    
+    for attempt in range(retries):
+        try:
+            # Connect to services
+            await cache_service.connect()
+            await queue_service.connect()
+            
+            # Start queue worker
+            asyncio.create_task(start_queue_worker())
+            return
+            
+        except Exception as e:
+            last_exception = e
+            logging.warning(f"Startup attempt {attempt + 1} failed: {str(e)}")
+            await asyncio.sleep(delay)
+            delay *= 2  # Exponential backoff
+    
+    logging.error("Failed to start application after multiple retries")
+    raise last_exception
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await cache_service.close()
+    await queue_service.close()
+
+
+
+
+
 
 # ---------------------------------------------------
 # Models
@@ -89,41 +129,6 @@ class BulkUrlRequest(BaseModel):
     items: List[ImageUrlRequest]
     check_duplicates: Optional[bool] = False
 
-# ---------------------------------------------------
-# Startup and Shutdown Events
-# ---------------------------------------------------
-@app.on_event("startup")
-async def startup_event():
-    retries = 5
-    delay = 1
-    last_exception = None
-    
-    for attempt in range(retries):
-        try:
-            # Connect to services
-            await cache_service.connect()
-            await queue_service.connect()
-            
-            # Start queue worker
-            asyncio.create_task(start_queue_worker())
-            
-            # Initialize metrics
-            Instrumentator().instrument(app).expose(app)
-            return
-            
-        except Exception as e:
-            last_exception = e
-            logging.warning(f"Startup attempt {attempt + 1} failed: {str(e)}")
-            await asyncio.sleep(delay)
-            delay *= 2  # Exponential backoff
-    
-    logging.error("Failed to start application after multiple retries")
-    raise last_exception
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    await cache_service.close()
-    await queue_service.close()
 
 # ---------------------------------------------------
 # Queue Worker
