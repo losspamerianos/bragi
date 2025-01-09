@@ -43,13 +43,25 @@ class StorageManager:
     def get_optimized_url(self, image_hash: str) -> str:
         """Gibt die URL der optimierten Version zurück"""
         return f"{settings.HOST}/storage/processed/avif/{image_hash}.avif"
+    
+    def get_original_extension(self, image_hash: str) -> Optional[str]:
+        """Ermittelt die original Dateiendung des gespeicherten Bildes"""
+        base_path = Path(f"{settings.STORAGE_PATH}/originals/{image_hash}")
+        # Suche nach allen Dateien die mit dem Hash beginnen
+        matches = list(base_path.parent.glob(f"{image_hash}.*"))
+        if matches:
+            # Nimm die Endung der ersten gefundenen Datei
+            return matches[0].suffix
+        return None
 
     def get_available_formats(self, image_hash: str) -> Dict[str, str]:
         """Gibt URLs für alle verfügbaren Formate zurück"""
+        original_ext = self.get_original_extension(image_hash) or ""
+        
         return {
             "avif": f"{settings.HOST}/storage/processed/avif/{image_hash}.avif",
             "webp": f"{settings.HOST}/storage/processed/webp/{image_hash}.webp",
-            "original": f"{settings.HOST}/storage/originals/{image_hash}"
+            "original": f"{settings.HOST}/storage/originals/{image_hash}{original_ext}"
         }
 
     async def save_original(self, image_data: bytes, image_hash: str, extension: str):
