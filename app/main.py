@@ -102,6 +102,43 @@ async def process_image_url(request: ImageUrlRequest, background_tasks: Backgrou
         
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+# Erweitertes Model für den Bulk Request
+class BulkUrlRequest(BaseModel):
+    items: List[ImageUrlRequest]  # Nutzt das existierende ImageUrlRequest Model
+    check_duplicates: Optional[bool] = False
+
+@app.post("/api/url/bulk", response_model=List[ImageResponse])
+async def process_bulk_urls(request: BulkUrlRequest, background_tasks: BackgroundTasks):
+    try:
+        responses = []
+        
+        for item in request.items:
+            url_hash = hashlib.sha256(str(item.url).encode()).hexdigest()
+            
+            if storage_manager.optimized_exists(url_hash):
+                responses.append(ImageResponse(
+                    original_url=str(item.url),
+                    status="complete",
+                    optimized_url=storage_manager.get_optimized_url(url_hash),
+                    formats=storage_manager.get_available_formats(url_hash)
+                ))
+            else:
+                background_tasks.add_task(
+                    image_processor.process_url,
+                    item.url,
+                    url_hash,
+                    size=item.size
+                )
+                responses.append(ImageResponse(
+                    original_url=str(item.url),
+                    status="working"
+                ))
+                
+        return responses
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/api/html", response_model=HtmlResponse)
 async def process_html_tag(request: HtmlTagRequest, background_tasks: BackgroundTasks):
@@ -132,6 +169,54 @@ async def process_html_tag(request: HtmlTagRequest, background_tasks: Background
             original_html=request.html,
             status="working"
         )
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+# Zuerst erweitern wir die Models
+class HtmlBatchRequest(BaseModel):
+    html_tags: List[str]
+    check_duplicates: Optional[bool] = False
+
+# Dann der neue Endpoint
+@app.post("/api/html/batch", response_model=List[HtmlResponse])
+async def process_html_batch(request: HtmlBatchRequest, background_tasks: BackgroundTasks):
+    try:
+        responses = []
+        
+        for html_tag in request.html_tags:
+            image_data = image_processor.parse_html_tag(html_tag)
+            if not image_data:
+                responses.append(HtmlResponse(
+                    original_html=html_tag,
+                    status="error",
+                    optimized_html=None
+                ))
+                continue
+                
+            url_hash = hashlib.sha256(image_data['url'].encode()).hexdigest()
+            
+            if storage_manager.optimized_exists(url_hash):
+                responses.append(HtmlResponse(
+                    original_html=html_tag,
+                    status="complete",
+                    optimized_html=image_processor.create_picture_tag(
+                        url_hash,
+                        image_data['attributes']
+                    )
+                ))
+            else:
+                background_tasks.add_task(
+                    image_processor.process_url,
+                    image_data['url'],
+                    url_hash
+                )
+                responses.append(HtmlResponse(
+                    original_html=html_tag,
+                    status="working"
+                ))
+                
+        return responses
         
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
