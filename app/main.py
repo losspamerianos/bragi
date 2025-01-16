@@ -238,25 +238,21 @@ async def process_bulk_urls(request: BulkUrlRequest, background_tasks: Backgroun
             cached_status = cached_statuses.get(url_hash)
             
             if cached_status and cached_status["status"] == ProcessingStatus.COMPLETE:
-                # Bereits verarbeitete Bilder
                 metadata = cached_status.get("metadata", {})
+                formats = storage_manager.get_available_formats(url_hash, item.size)  # Hier sized formats hinzufügen
+                
                 responses.append(ImageResponse(
                     original_url=str(item.url),
                     status="complete",
-                    optimized_url=metadata.get("optimized_url"),
-                    formats=metadata.get("formats"),
+                    optimized_url=formats.get('avif'),  # Nutze format aus der neuen formats map
+                    formats=formats,
                     dimensions=metadata.get("dimensions", {})
                 ))
                 continue
 
-            # Wenn noch nicht verarbeitet oder im Cache
             if not await cache_service.acquire_lock(url_hash):
-                # Bereits in Verarbeitung
-                status = "processing"
-                if cached_status:
-                    status = cached_status["status"]
+                status = cached_status["status"] if cached_status else "processing"
             else:
-                # Starte Verarbeitung im Hintergrund
                 await cache_service.set_image_status(url_hash, ProcessingStatus.PENDING)
                 background_tasks.add_task(
                     queue_service.enqueue_task,
@@ -269,10 +265,12 @@ async def process_bulk_urls(request: BulkUrlRequest, background_tasks: Backgroun
                 )
                 status = "pending"
 
-            # Sofortige Rückmeldung
             responses.append(ImageResponse(
                 original_url=str(item.url),
-                status=status
+                status=status,
+                optimized_url=None,
+                formats=None,
+                dimensions=None
             ))
 
         return responses
@@ -283,71 +281,6 @@ async def process_bulk_urls(request: BulkUrlRequest, background_tasks: Backgroun
             await cache_service.release_lock(url_hash)
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/api/html", response_model=HtmlResponse)
-async def process_html_tag(request: HtmlTagRequest):
-    try:
-        image_data = image_processor.parse_html_tag(request.html)
-        if not image_data:
-            raise ValueError("No valid img tag found")
-            
-        url_hash = hashlib.sha256(image_data['url'].encode()).hexdigest()
-        
-        # Check cache first
-        cached_status = await cache_service.get_image_status(url_hash)
-        if cached_status and cached_status["status"] == ProcessingStatus.COMPLETE:
-            return HtmlResponse(
-                original_html=request.html,
-                status="complete",
-                optimized_html=image_processor.create_picture_tag(
-                    url_hash,
-                    image_data['attributes'],
-                    cached_status["metadata"]["formats"]
-                )
-            )
-        
-        if storage_manager.optimized_exists(url_hash):
-            formats = storage_manager.get_available_formats(url_hash)
-            await cache_service.set_image_status(
-                url_hash,
-                ProcessingStatus.COMPLETE,
-                metadata={"formats": formats}
-            )
-            return HtmlResponse(
-                original_html=request.html,
-                status="complete",
-                optimized_html=image_processor.create_picture_tag(
-                    url_hash,
-                    image_data['attributes'],
-                    formats
-                )
-            )
-            
-        # Try to acquire lock
-        if not await cache_service.acquire_lock(url_hash):
-            return HtmlResponse(
-                original_html=request.html,
-                status="processing"
-            )
-        
-        # Queue new task
-        await cache_service.set_image_status(url_hash, ProcessingStatus.PENDING)
-        await queue_service.enqueue_task(
-            "process_image",
-            {
-                "url": image_data['url'],
-                "url_hash": url_hash
-            }
-        )
-        
-        return HtmlResponse(
-            original_html=request.html,
-            status="pending"
-        )
-        
-    except Exception as e:
-        if url_hash:
-            await cache_service.release_lock(url_hash)
-        raise HTTPException(status_code=400, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
