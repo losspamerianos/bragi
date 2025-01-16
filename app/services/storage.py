@@ -50,14 +50,18 @@ class StorageManager:
 
     def get_optimized_url(self, image_hash: str, format_type: str = 'avif', size: Optional[int] = None) -> str:
         """Gibt die URL der optimierten Version zurück"""
+        # Entferne doppelte Slashes und trailing slashes
+        base_url = settings.HOST.rstrip('/')
+        
         if format_type == 'original':
             extension = self.get_original_extension(image_hash) or ""
-            return f"{settings.HOST}/storage/originals/{image_hash}{extension}"
+            return f"{base_url}/storage/originals/{image_hash}{extension}"
         
         if size:
-            return f"{settings.HOST}/storage/processed/{format_type}/{size}/{image_hash}.{format_type}"
-        
-        return f"{settings.HOST}/storage/processed/{format_type}/{image_hash}.{format_type}"
+            # Format: hash_size.format statt size/hash.format
+            return f"{base_url}/storage/processed/{format_type}/{image_hash}_{size}.{format_type}"
+            
+        return f"{base_url}/storage/processed/{format_type}/{image_hash}.{format_type}"
     
     def get_original_extension(self, image_hash: str) -> Optional[str]:
         """Ermittelt die original Dateiendung des gespeicherten Bildes"""
