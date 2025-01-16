@@ -224,61 +224,59 @@ async def process_image_url(request: ImageUrlRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/url/bulk", response_model=List[ImageResponse])
-async def process_bulk_urls(request: BulkUrlRequest):
+async def process_bulk_urls(request: BulkUrlRequest, background_tasks: BackgroundTasks):
     try:
         responses = []
-        tasks = []
         url_hashes = [
             hashlib.sha256(str(item.url).encode()).hexdigest()
             for item in request.items
         ]
         
-        logger.info(f"Processing bulk request for {len(request.items)} items")
         cached_statuses = await cache_service.get_bulk_status(url_hashes)
         
-        for idx, (item, url_hash) in enumerate(zip(request.items, url_hashes)):
-            try:
-                logger.info(f"Processing item {idx + 1}/{len(request.items)}: {item.url}")
-                cached_status = cached_statuses.get(url_hash)
-                
-                if storage_manager.optimized_exists(url_hash):
-                    logger.info(f"Item {url_hash} exists, processing with size {item.size}")
-                    try:
-                        result = await image_processor.process_url(str(item.url), url_hash, item.size)
-                        responses.append(ImageResponse(**result))
-                        logger.info(f"Successfully processed {url_hash}")
-                    except Exception as e:
-                        logger.error(f"Error processing optimized image {item.url}: {str(e)}", exc_info=True)
-                        await cache_service.set_image_status(
-                            url_hash,
-                            ProcessingStatus.ERROR,
-                            metadata={"error": str(e)}
-                        )
-                        responses.append(ImageResponse(
-                            original_url=str(item.url),
-                            status="error",
-                            optimized_url=None,
-                            formats=None,
-                            dimensions=None
-                        ))
-                    continue
-                
-                logger.info(f"Item {url_hash} needs to be queued")
-                # ... Rest des Codes bleibt gleich ...
-                
-            except Exception as e:
-                logger.error(f"Error processing item {item.url}: {str(e)}", exc_info=True)
+        for item, url_hash in zip(request.items, url_hashes):
+            cached_status = cached_statuses.get(url_hash)
+            
+            if cached_status and cached_status["status"] == ProcessingStatus.COMPLETE:
+                # Bereits verarbeitete Bilder
+                metadata = cached_status.get("metadata", {})
                 responses.append(ImageResponse(
                     original_url=str(item.url),
-                    status="error",
-                    optimized_url=None,
-                    formats=None,
-                    dimensions=None
+                    status="complete",
+                    optimized_url=metadata.get("optimized_url"),
+                    formats=metadata.get("formats"),
+                    dimensions=metadata.get("dimensions", {})
                 ))
                 continue
-        
+
+            # Wenn noch nicht verarbeitet oder im Cache
+            if not await cache_service.acquire_lock(url_hash):
+                # Bereits in Verarbeitung
+                status = "processing"
+                if cached_status:
+                    status = cached_status["status"]
+            else:
+                # Starte Verarbeitung im Hintergrund
+                await cache_service.set_image_status(url_hash, ProcessingStatus.PENDING)
+                background_tasks.add_task(
+                    queue_service.enqueue_task,
+                    "process_image",
+                    {
+                        "url": str(item.url),
+                        "url_hash": url_hash,
+                        "size": item.size
+                    }
+                )
+                status = "pending"
+
+            # Sofortige Rückmeldung
+            responses.append(ImageResponse(
+                original_url=str(item.url),
+                status=status
+            ))
+
         return responses
-        
+
     except Exception as e:
         logger.error(f"Bulk processing error: {str(e)}", exc_info=True)
         for url_hash in url_hashes:
