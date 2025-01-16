@@ -233,69 +233,97 @@ async def process_bulk_urls(request: BulkUrlRequest):
         cached_statuses = await cache_service.get_bulk_status(url_hashes)
         
         for item, url_hash in zip(request.items, url_hashes):
-            cached_status = cached_statuses.get(url_hash)
-            
-            if cached_status and cached_status["status"] == ProcessingStatus.COMPLETE:
-                metadata = cached_status.get("metadata", {})
-                responses.append(ImageResponse(
-                    original_url=str(item.url),
-                    status="complete",
-                    optimized_url=metadata.get("optimized_url"),
-                    formats=metadata.get("formats"),
-                    dimensions=metadata.get("dimensions", {})
-                ))
-                continue
+            try:
+                cached_status = cached_statuses.get(url_hash)
                 
-            if cached_status:
-                responses.append(ImageResponse(
-                    original_url=str(item.url),
-                    status=cached_status["status"]
-                ))
-                continue
-            
-            if storage_manager.optimized_exists(url_hash):
-                try:
-                    result = await image_processor.process_url(str(item.url), url_hash, item.size)
-                    responses.append(ImageResponse(**result))
-                except Exception as e:
-                    await cache_service.set_image_status(
-                        url_hash,
-                        ProcessingStatus.ERROR,
-                        metadata={"error": str(e)}
-                    )
+                if cached_status and cached_status["status"] == ProcessingStatus.COMPLETE:
+                    metadata = cached_status.get("metadata", {})
                     responses.append(ImageResponse(
                         original_url=str(item.url),
-                        status="error"
+                        status="complete",
+                        optimized_url=metadata.get("optimized_url"),
+                        formats=metadata.get("formats"),
+                        dimensions=metadata.get("dimensions", {})
                     ))
-                continue
-            
-            if not await cache_service.acquire_lock(url_hash):
-                cached_status = await cache_service.get_image_status(url_hash)
+                    continue
+                    
+                if cached_status:
+                    responses.append(ImageResponse(
+                        original_url=str(item.url),
+                        status=cached_status["status"]
+                    ))
+                    continue
+                
+                if storage_manager.optimized_exists(url_hash):
+                    try:
+                        result = await image_processor.process_url(str(item.url), url_hash, item.size)
+                        responses.append(ImageResponse(**result))
+                    except Exception as e:
+                        print(f"Error processing optimized image {item.url}: {str(e)}")
+                        import traceback
+                        print(traceback.format_exc())
+                        await cache_service.set_image_status(
+                            url_hash,
+                            ProcessingStatus.ERROR,
+                            metadata={"error": str(e)}
+                        )
+                        responses.append(ImageResponse(
+                            original_url=str(item.url),
+                            status="error",
+                            optimized_url=None,
+                            formats=None,
+                            dimensions=None
+                        ))
+                    continue
+                
+                if not await cache_service.acquire_lock(url_hash):
+                    cached_status = await cache_service.get_image_status(url_hash)
+                    responses.append(ImageResponse(
+                        original_url=str(item.url),
+                        status=cached_status["status"] if cached_status else "processing"
+                    ))
+                    continue
+                
+                tasks.append({
+                    "task_type": "process_image",
+                    "payload": {
+                        "url": str(item.url),
+                        "url_hash": url_hash,
+                        "size": item.size
+                    }
+                })
+                
+                await cache_service.set_image_status(url_hash, ProcessingStatus.PENDING)
                 responses.append(ImageResponse(
                     original_url=str(item.url),
-                    status=cached_status["status"] if cached_status else "processing"
+                    status="pending"
+                ))
+                
+            except Exception as e:
+                print(f"Error processing item {item.url}: {str(e)}")
+                import traceback
+                print(traceback.format_exc())
+                responses.append(ImageResponse(
+                    original_url=str(item.url),
+                    status="error",
+                    optimized_url=None,
+                    formats=None,
+                    dimensions=None
                 ))
                 continue
-            
-            tasks.append({
-                "task_type": "process_image",
-                "payload": {
-                    "url": str(item.url),
-                    "url_hash": url_hash,
-                    "size": item.size
-                }
-            })
-            
-            await cache_service.set_image_status(url_hash, ProcessingStatus.PENDING)
-            responses.append(ImageResponse(
-                original_url=str(item.url),
-                status="pending"
-            ))
         
         if tasks:
             await queue_service.enqueue_bulk_tasks(tasks)
         
         return responses
+        
+    except Exception as e:
+        print(f"Bulk processing error: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        for url_hash in url_hashes:
+            await cache_service.release_lock(url_hash)
+        raise HTTPException(status_code=400, detail=str(e))
         
     except Exception as e:
         for url_hash in url_hashes:
