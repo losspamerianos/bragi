@@ -254,32 +254,19 @@ async def process_bulk_urls(request: BulkUrlRequest):
                 continue
             
             if storage_manager.optimized_exists(url_hash):
-                dimensions = await image_processor.process_url(str(item.url), url_hash, item.size)
-                formats = {}
-                
-                for format_type in ['avif', 'webp']:
-                    formats[format_type] = storage_manager.get_optimized_url(url_hash, format_type)
-                    if item.size:
-                        formats[f"{format_type}_{item.size}"] = storage_manager.get_optimized_url(
-                            url_hash, format_type, item.size
-                        )
-                
-                formats['original'] = storage_manager.get_optimized_url(url_hash, 'original')
-                
-                response_data = {
-                    "original_url": str(item.url),
-                    "status": "complete",
-                    "optimized_url": formats['avif'],
-                    "formats": formats,
-                    "dimensions": dimensions or {}
-                }
-                
-                await cache_service.set_image_status(
-                    url_hash,
-                    ProcessingStatus.COMPLETE,
-                    metadata=response_data
-                )
-                responses.append(ImageResponse(**response_data))
+                try:
+                    result = await image_processor.process_url(str(item.url), url_hash, item.size)
+                    responses.append(ImageResponse(**result))
+                except Exception as e:
+                    await cache_service.set_image_status(
+                        url_hash,
+                        ProcessingStatus.ERROR,
+                        metadata={"error": str(e)}
+                    )
+                    responses.append(ImageResponse(
+                        original_url=str(item.url),
+                        status="error"
+                    ))
                 continue
             
             if not await cache_service.acquire_lock(url_hash):
