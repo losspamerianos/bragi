@@ -13,7 +13,7 @@ import numpy as np
 
 from PIL import Image
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from bs4 import BeautifulSoup
 
 from ..config import settings
