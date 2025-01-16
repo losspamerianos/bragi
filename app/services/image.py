@@ -40,17 +40,35 @@ class ImageProcessor:
             self._create_avif(image, url_hash)
             self._create_webp(image, url_hash)
 
-            # Create sized versions if size is specified
+            formats = self.storage_manager.get_available_formats(url_hash)
+            response_data = {
+                "original_url": url,
+                "status": "complete",
+                "optimized_url": formats['avif'],
+                "formats": formats,
+                "dimensions": dimensions
+            }
+
+            # Handle resizing
             if size:
+                print(f"Processing size: {size}")
                 scale = size/image.width
                 resized = image.resize(scale)
                 dimensions[str(size)] = f"{resized.width}x{resized.height}"
                 
                 size_hash = f"{url_hash}_{size}"
+                print(f"Creating sized versions with hash: {size_hash}")
                 self._create_avif(resized, size_hash)
                 self._create_webp(resized, size_hash)
                 
-            return dimensions
+                # Update formats with sized versions
+                formats.update({
+                    f"avif_{size}": self.storage_manager.get_optimized_url(url_hash, 'avif', size),
+                    f"webp_{size}": self.storage_manager.get_optimized_url(url_hash, 'webp', size)
+                })
+                response_data["formats"] = formats
+
+            return response_data
 
         except Exception as e:
             print(f"Error processing {url}: {str(e)}")

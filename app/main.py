@@ -199,38 +199,26 @@ async def process_image_url(request: ImageUrlRequest):
                 dimensions=metadata.get("dimensions", {})
             )
 
-        if storage_manager.optimized_exists(url_hash):
-            dimensions = await image_processor.process_url(str(request.url), url_hash, request.size)
-            formats = {}
+        # Versuche Optimierung
+        try:
+            result = await image_processor.process_url(str(request.url), url_hash, request.size)
+            return ImageResponse(**result)
             
-            for format_type in ['avif', 'webp']:
-                formats[format_type] = storage_manager.get_optimized_url(url_hash, format_type)
-                if request.size:
-                    formats[f"{format_type}_{request.size}"] = storage_manager.get_optimized_url(
-                        url_hash, format_type, request.size
-                    )
-            
-            formats['original'] = storage_manager.get_optimized_url(url_hash, 'original')
-            
-            response_data = {
-                "original_url": str(request.url),
-                "status": "complete",
-                "optimized_url": formats['avif'],
-                "formats": formats,
-                "dimensions": dimensions or {}
-            }
-            
+        except Exception as e:
+            # Bei Fehler setze Status auf ERROR
             await cache_service.set_image_status(
                 url_hash,
-                ProcessingStatus.COMPLETE,
-                metadata=response_data
+                ProcessingStatus.ERROR,
+                metadata={"error": str(e)}
             )
-            return ImageResponse(**response_data)
-        
+            raise HTTPException(status_code=500, detail=str(e))
+            
+    except HTTPException:
+        raise
     except Exception as e:
         if url_hash:
             await cache_service.release_lock(url_hash)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/url/bulk", response_model=List[ImageResponse])
 async def process_bulk_urls(request: BulkUrlRequest):
