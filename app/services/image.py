@@ -8,6 +8,7 @@ import cv2
 import pyvips # type: ignore
 import imagehash # type: ignore
 import hashlib
+import logging
 
 import numpy as np
 
@@ -19,6 +20,9 @@ from bs4 import BeautifulSoup
 from ..config import settings
 from .storage import StorageManager  # StorageManager Import hinzugefügt
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
 class ImageProcessor:
     def __init__(self):
         self.executor = ThreadPoolExecutor(max_workers=settings.MAX_WORKERS)
@@ -27,6 +31,7 @@ class ImageProcessor:
     async def process_url(self, url: str, url_hash: str, size: Any = None):
         dimensions = {}
         try:
+            logger.info(f"Starting processing of {url} with hash {url_hash} and size {size}")
             # Fetch and save original
             image_data = await self.storage_manager.fetch_image(url)
             extension = self.storage_manager.get_file_extension("image/jpeg")
@@ -71,9 +76,7 @@ class ImageProcessor:
             return response_data
 
         except Exception as e:
-            print(f"Error processing {url}: {str(e)}")
-            import traceback
-            print(traceback.format_exc())
+            logger.error(f"Error processing {url}: {str(e)}", exc_info=True)
             raise
         
     async def optimize_image(self, image_data: bytes, image_hash: str, size: Any = None):
