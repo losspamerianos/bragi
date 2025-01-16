@@ -40,9 +40,26 @@ class StorageManager:
         print(f"Exist?: AVIF: {avif_path.exists()}, WebP: {webp_path.exists()}")
         return avif_path.exists() and webp_path.exists()
 
-    def get_optimized_url(self, image_hash: str) -> str:
-        """Gibt die URL der optimierten Version zurück"""
-        return f"{settings.HOST}/storage/processed/avif/{image_hash}.avif"
+    def get_optimized_url(self, image_hash: str, format_type: str = 'avif', size: Optional[int] = None) -> str:
+        """Gibt die URL der optimierten Version zurück
+        
+        Args:
+            image_hash: Hash des Bildes
+            format_type: Format (avif, webp, original)
+            size: Optionale Größe für skalierte Versionen
+        """
+        if format_type == 'original':
+            extension = self.get_original_extension(image_hash) or ""
+            base_path = f"{settings.HOST}/storage/originals/{image_hash}{extension}"
+        else:
+            base_path = f"{settings.HOST}/storage/processed/{format_type}/{image_hash}.{format_type}"
+        
+        if size:
+            # Füge Größe zum Pfad hinzu, z.B. image_500.avif
+            path_parts = base_path.rsplit('.', 1)
+            return f"{path_parts[0]}_{size}.{path_parts[1]}"
+            
+        return base_path
     
     def get_original_extension(self, image_hash: str) -> Optional[str]:
         """Ermittelt die original Dateiendung des gespeicherten Bildes"""
