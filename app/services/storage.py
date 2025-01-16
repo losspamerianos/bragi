@@ -63,19 +63,16 @@ class StorageManager:
         """Gibt URLs für alle verfügbaren Formate zurück"""
         original_ext = self.get_original_extension(image_hash) or ""
         formats = {
-            "original": f"{settings.HOST}/storage/originals/{image_hash}{original_ext}"
+            "original": f"{settings.HOST}/storage/originals/{image_hash}{original_ext}",
+            "avif": self.get_optimized_url(image_hash, 'avif'),
+            "webp": self.get_optimized_url(image_hash, 'webp')
         }
         
-        # Füge Basis-Formate hinzu
-        for format_type in ['avif', 'webp']:
-            formats[format_type] = self.get_optimized_url(image_hash, format_type)
-        
-        # Füge skalierte Versionen hinzu wenn size angegeben
         if size:
-            for format_type in ['avif', 'webp']:
-                formats[f"{format_type}_{size}"] = self.get_optimized_url(
-                    image_hash, format_type, size
-                )
+            formats.update({
+                f"avif_{size}": self.get_optimized_url(image_hash, 'avif', size),
+                f"webp_{size}": self.get_optimized_url(image_hash, 'webp', size)
+            })
         
         return formats
 

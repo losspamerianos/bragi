@@ -27,23 +27,29 @@ class ImageProcessor:
     async def process_url(self, url: str, url_hash: str, size: Any = None):
         dimensions = {}
         try:
+            # Fetch and save original
             image_data = await self.storage_manager.fetch_image(url)
             extension = self.storage_manager.get_file_extension("image/jpeg")
             await self.storage_manager.save_original(image_data, url_hash, extension)
 
+            # Load image for processing
             image = pyvips.Image.new_from_buffer(image_data, "")
             dimensions['original'] = f"{image.width}x{image.height}"
 
+            # Create base versions
+            self._create_avif(image, url_hash)
+            self._create_webp(image, url_hash)
+
+            # Create sized versions if size is specified
             if size:
                 scale = size/image.width
                 resized = image.resize(scale)
-                dimensions[f"{size}"] = f"{resized.width}x{resized.height}"
-                self._create_avif(resized, f"{url_hash}-{size}")
-                self._create_webp(resized, f"{url_hash}-{size}")
-            
-            self._create_avif(image, url_hash)
-            self._create_webp(image, url_hash)
-            
+                dimensions[str(size)] = f"{resized.width}x{resized.height}"
+                
+                size_hash = f"{url_hash}_{size}"
+                self._create_avif(resized, size_hash)
+                self._create_webp(resized, size_hash)
+                
             return dimensions
 
         except Exception as e:
