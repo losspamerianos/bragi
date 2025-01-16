@@ -18,7 +18,8 @@ from typing import List, Dict, Any, Tuple, Optional
 from bs4 import BeautifulSoup
 
 from ..config import settings
-from .storage import StorageManager  # StorageManager Import hinzugefügt
+from .storage import StorageManager
+from .cache import CacheService, ProcessingStatus  # Neue Imports
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -32,48 +33,49 @@ class ImageProcessor:
         dimensions = {}
         try:
             logger.info(f"Starting processing of {url} with hash {url_hash} and size {size}")
-            # Fetch and save original
+            
             image_data = await self.storage_manager.fetch_image(url)
             extension = self.storage_manager.get_file_extension("image/jpeg")
             await self.storage_manager.save_original(image_data, url_hash, extension)
 
-            # Load image for processing
             image = pyvips.Image.new_from_buffer(image_data, "")
             dimensions['original'] = f"{image.width}x{image.height}"
-
-            # Create base versions
+            
+            # Basis-Versionen erstellen
             self._create_avif(image, url_hash)
             self._create_webp(image, url_hash)
+            
+            # Skalierte Version wenn notwendig
+            if size:
+                scale = size/image.width
+                resized = image.resize(scale)
+                dimensions[str(size)] = f"{resized.width}x{resized.height}"
+                
+                size_hash = f"{url_hash}_{size}"
+                self._create_avif(resized, size_hash)
+                self._create_webp(resized, size_hash)
+                
+            # Response vorbereiten
+            formats = self.storage_manager.get_available_formats(url_hash, size)
+            
+            # Cache aktualisieren mit allen Informationen
+            await self.cache_service.set_image_status(  # self.cache_service statt cache_service
+                url_hash,
+                ProcessingStatus.COMPLETE,
+                metadata={
+                    "optimized_url": formats['avif'],
+                    "formats": formats,
+                    "dimensions": dimensions
+                }
+            )
 
-            formats = self.storage_manager.get_available_formats(url_hash)
-            response_data = {
+            return {
                 "original_url": url,
                 "status": "complete",
                 "optimized_url": formats['avif'],
                 "formats": formats,
                 "dimensions": dimensions
             }
-
-            # Handle resizing
-            if size:
-                print(f"Processing size: {size}")
-                scale = size/image.width
-                resized = image.resize(scale)
-                dimensions[str(size)] = f"{resized.width}x{resized.height}"
-                
-                size_hash = f"{url_hash}_{size}"
-                print(f"Creating sized versions with hash: {size_hash}")
-                self._create_avif(resized, size_hash)
-                self._create_webp(resized, size_hash)
-                
-                # Update formats with sized versions
-                formats.update({
-                    f"avif_{size}": self.storage_manager.get_optimized_url(url_hash, 'avif', size),
-                    f"webp_{size}": self.storage_manager.get_optimized_url(url_hash, 'webp', size)
-                })
-                response_data["formats"] = formats
-
-            return response_data
 
         except Exception as e:
             logger.error(f"Error processing {url}: {str(e)}", exc_info=True)
