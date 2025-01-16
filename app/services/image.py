@@ -29,6 +29,18 @@ class ImageProcessor:
         self.executor = ThreadPoolExecutor(max_workers=settings.MAX_WORKERS)
         self.storage_manager = StorageManager()
         
+# services/image.py
+
+# services/image.py
+
+class ImageProcessor:
+    def __init__(self):
+        self.executor = ThreadPoolExecutor(max_workers=settings.MAX_WORKERS)
+        self.storage_manager = StorageManager()
+        
+        # Die Variable haben wir hinzugefügt aber die Instanz fehlt
+        # self.cache_service = CacheService(settings.REDIS_URL)
+        
     async def process_url(self, url: str, url_hash: str, size: Any = None):
         dimensions = {}
         try:
@@ -54,21 +66,9 @@ class ImageProcessor:
                 size_hash = f"{url_hash}_{size}"
                 self._create_avif(resized, size_hash)
                 self._create_webp(resized, size_hash)
-                
-            # Response vorbereiten
+            
             formats = self.storage_manager.get_available_formats(url_hash, size)
             
-            # Cache aktualisieren mit allen Informationen
-            await self.cache_service.set_image_status(  # self.cache_service statt cache_service
-                url_hash,
-                ProcessingStatus.COMPLETE,
-                metadata={
-                    "optimized_url": formats['avif'],
-                    "formats": formats,
-                    "dimensions": dimensions
-                }
-            )
-
             return {
                 "original_url": url,
                 "status": "complete",
