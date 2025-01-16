@@ -1,3 +1,7 @@
+# ---------------------------------------------------
+# Storage
+# /services/storage.py
+# ---------------------------------------------------
 import aiohttp
 import hashlib
 import os
@@ -10,11 +14,17 @@ from ..config import settings
 
 class StorageManager:
     def __init__(self):
-        # Erstelle Verzeichnisstruktur falls nicht vorhanden
+        # Basis-Verzeichnisse
         os.makedirs(f"{settings.STORAGE_PATH}/originals", exist_ok=True)
-        os.makedirs(f"{settings.STORAGE_PATH}/processed/avif", exist_ok=True)
-        os.makedirs(f"{settings.STORAGE_PATH}/processed/webp", exist_ok=True)
         
+        # Verzeichnisse für jedes Format und Größe
+        for format_type in ['avif', 'webp']:
+            base_path = f"{settings.STORAGE_PATH}/processed/{format_type}"
+            os.makedirs(base_path, exist_ok=True)
+            # Erstelle Unterverzeichnisse für DEFAULT_SIZES
+            for size in settings.DEFAULT_SIZES:
+                os.makedirs(f"{base_path}/{size}", exist_ok=True)
+
     async def fetch_image(self, url: str) -> bytes:
         """Lädt ein Bild von einer URL"""
         async with aiohttp.ClientSession() as session:
@@ -28,58 +38,53 @@ class StorageManager:
                     
                 return await response.read()
 
-    def calculate_hash(self, image_data: bytes) -> str:
-        """Berechnet einen eindeutigen Hash für das Bild"""
-        return hashlib.sha256(image_data).hexdigest()
-
-    def optimized_exists(self, image_hash: str) -> bool:
+    def optimized_exists(self, image_hash: str, size: Optional[int] = None) -> bool:
         """Prüft ob bereits optimierte Versionen existieren"""
-        avif_path = Path(f"{settings.STORAGE_PATH}/processed/avif/{image_hash}.avif")
-        webp_path = Path(f"{settings.STORAGE_PATH}/processed/webp/{image_hash}.webp")
-        print(f"Checking paths:\nAVIF: {avif_path}\nWebP: {webp_path}")
-        print(f"Exist?: AVIF: {avif_path.exists()}, WebP: {webp_path.exists()}")
+        if size:
+            avif_path = Path(f"{settings.STORAGE_PATH}/processed/avif/{size}/{image_hash}.avif")
+            webp_path = Path(f"{settings.STORAGE_PATH}/processed/webp/{size}/{image_hash}.webp")
+        else:
+            avif_path = Path(f"{settings.STORAGE_PATH}/processed/avif/{image_hash}.avif")
+            webp_path = Path(f"{settings.STORAGE_PATH}/processed/webp/{image_hash}.webp")
         return avif_path.exists() and webp_path.exists()
 
     def get_optimized_url(self, image_hash: str, format_type: str = 'avif', size: Optional[int] = None) -> str:
-        """Gibt die URL der optimierten Version zurück
-        
-        Args:
-            image_hash: Hash des Bildes
-            format_type: Format (avif, webp, original)
-            size: Optionale Größe für skalierte Versionen
-        """
+        """Gibt die URL der optimierten Version zurück"""
         if format_type == 'original':
             extension = self.get_original_extension(image_hash) or ""
-            base_path = f"{settings.HOST}/storage/originals/{image_hash}{extension}"
-        else:
-            base_path = f"{settings.HOST}/storage/processed/{format_type}/{image_hash}.{format_type}"
+            return f"{settings.HOST}/storage/originals/{image_hash}{extension}"
         
         if size:
-            # Füge Größe zum Pfad hinzu, z.B. image_500.avif
-            path_parts = base_path.rsplit('.', 1)
-            return f"{path_parts[0]}_{size}.{path_parts[1]}"
-            
-        return base_path
-    
-    def get_original_extension(self, image_hash: str) -> Optional[str]:
-        """Ermittelt die original Dateiendung des gespeicherten Bildes"""
-        base_path = Path(f"{settings.STORAGE_PATH}/originals/{image_hash}")
-        # Suche nach allen Dateien die mit dem Hash beginnen
-        matches = list(base_path.parent.glob(f"{image_hash}.*"))
-        if matches:
-            # Nimm die Endung der ersten gefundenen Datei
-            return matches[0].suffix
-        return None
+            return f"{settings.HOST}/storage/processed/{format_type}/{size}/{image_hash}.{format_type}"
+        
+        return f"{settings.HOST}/storage/processed/{format_type}/{image_hash}.{format_type}"
 
-    def get_available_formats(self, image_hash: str) -> Dict[str, str]:
+    def get_available_formats(self, image_hash: str, size: Optional[int] = None) -> Dict[str, str]:
         """Gibt URLs für alle verfügbaren Formate zurück"""
         original_ext = self.get_original_extension(image_hash) or ""
-        
-        return {
-            "avif": f"{settings.HOST}/storage/processed/avif/{image_hash}.avif",
-            "webp": f"{settings.HOST}/storage/processed/webp/{image_hash}.webp",
+        formats = {
             "original": f"{settings.HOST}/storage/originals/{image_hash}{original_ext}"
         }
+        
+        # Füge Basis-Formate hinzu
+        for format_type in ['avif', 'webp']:
+            formats[format_type] = self.get_optimized_url(image_hash, format_type)
+        
+        # Füge skalierte Versionen hinzu wenn size angegeben
+        if size:
+            for format_type in ['avif', 'webp']:
+                formats[f"{format_type}_{size}"] = self.get_optimized_url(
+                    image_hash, format_type, size
+                )
+        
+        return formats
+
+    def get_output_path(self, image_hash: str, format_type: str, size: Optional[int] = None) -> str:
+        """Gibt den Dateipfad für das zu speichernde Bild zurück"""
+        if size:
+            return f"{settings.STORAGE_PATH}/processed/{format_type}/{size}/{image_hash}.{format_type}"
+        return f"{settings.STORAGE_PATH}/processed/{format_type}/{image_hash}.{format_type}"
+
 
     async def save_original(self, image_data: bytes, image_hash: str, extension: str):
         """Speichert das Originalbild"""

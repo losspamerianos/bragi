@@ -1,3 +1,7 @@
+# ---------------------------------------------------
+# Config
+# /config.py
+# ---------------------------------------------------
 from pydantic_settings import BaseSettings
 from typing import List, ClassVar
 from pydantic import model_validator, ConfigDict

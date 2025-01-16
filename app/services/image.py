@@ -1,3 +1,7 @@
+# ---------------------------------------------------
+# Image Processor
+# /services/image.py
+# ---------------------------------------------------
 import os
 import io
 import cv2
@@ -165,9 +169,9 @@ class ImageProcessor:
             
         return image.resize(scale)
         
-    def _create_avif(self, image: pyvips.Image, image_hash: str):
+    def _create_avif(self, image: pyvips.Image, image_hash: str, size: Optional[int] = None):
         """Erstellt eine AVIF Version des Bildes"""
-        output_path = f"{settings.STORAGE_PATH}/processed/avif/{image_hash}.avif"
+        output_path = self.storage_manager.get_output_path(image_hash, 'avif', size)
         print(f"Creating AVIF at: {output_path}")
         try:
             image.write_to_file(output_path, effort=settings.AVIF_EFFORT)
@@ -175,10 +179,10 @@ class ImageProcessor:
         except Exception as e:
             print(f"Error creating AVIF: {str(e)}")
             raise
-        
-    def _create_webp(self, image: pyvips.Image, image_hash: str):
+
+    def _create_webp(self, image: pyvips.Image, image_hash: str, size: Optional[int] = None):
         """Erstellt eine WebP Version des Bildes"""
-        output_path = f"{settings.STORAGE_PATH}/processed/webp/{image_hash}.webp"
+        output_path = self.storage_manager.get_output_path(image_hash, 'webp', size)
         print(f"Creating WebP at: {output_path}")
         try:
             image.write_to_file(output_path)
